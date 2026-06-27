@@ -1,0 +1,254 @@
+================================================================================
+SUGGESTION — External GDHR data sync (4 tables + scheduled importer)
+Source spec: docs/extenal-data.txt
+Status: PROPOSAL — please review & confirm before I build.
+================================================================================
+
+------------------------------------------------------------------------------
+0. WHAT YOU ASKED FOR (my understanding)
+------------------------------------------------------------------------------
+- Create 4 tables to store data pulled from the external GDHR API:
+    institutes, staffs, ranks, positions
+- "id" fields (parent_id, rank_id, position_id, department_id, ...) are NOT
+  foreign keys — just plain columns WITH an index on each.
+- A schedule that runs every day in the window 18:00 -> 05:00 and imports data:
+    1) institutes : fetch a page every 20s, page 1 -> next -> until empty
+    2) staffs     : fetch a page every 10s, page 1 -> next -> until empty
+    3) ranks      : once per day (single call, no paging)
+    4) positions  : once per day (single call, no paging)
+
+If any of this is wrong, tell me and I'll adjust the doc.
+
+------------------------------------------------------------------------------
+1. THE EXTERNAL API (from docs/extenal-data.txt)
+------------------------------------------------------------------------------
+Base URL : https://apiatd-gdhr.interior.gov.kh/api/v2/gdhr
+Auth     : POST body JSON { "u": <user>, "p": <pass>, "key": <key> }
+           (NOTE: page number is in the URL PATH, not the body)
+
+Endpoint                         Paged?  Response envelope (where the rows live)
+-------------------------------- ------- ----------------------------------------
+/public-institutes/{page}        yes     { page, totalPages, totalItems, items[] }
+/public-staffs/{page}            yes     { total, page, pageSize, data[] }
+/public-ranks                    no      { data: { items[] } }
+/public-positions                no      { data: { items[] } }
+
+Quirks to handle:
+- Each endpoint has a DIFFERENT envelope (items[] vs data[] vs data.items[]).
+- "pageSize": 0 on institutes — the server ignores pageSize; we just follow
+  page numbers and stop when a page returns 0 rows.
+- ranks.active is returned as a Buffer object: {"type":"Buffer","data":[1]}.
+  I'll decode data[0] -> bool.
+- institutes.active is the string "1". I'll decode "1"/"0" -> bool.
+- Field "promote_peroid" is misspelled in the source; I'll keep the JSON tag as
+  "promote_peroid" but name the Go field/column PromotePeriod / promote_period.
+
+------------------------------------------------------------------------------
+2. PROPOSED TABLE SCHEMAS  (GORM models, MySQL, utf8mb4 — Khmer text safe)
+------------------------------------------------------------------------------
+Conventions kept from the existing codebase: GORM tags, TableName() override,
+CreatedAt/UpdatedAt timestamps. No foreign keys anywhere — only indexes.
+Column-sizing rule: any UUID-style string id uses string size:100
+(id, parent_id, uid, institute_id). Non-UUID strings keep tighter sizes.
+
+(A) institutes   -> models/institute.go
+    id              string  PK (UUID-style, e.g. "inst-0131c311-...")  size:100
+    old_id          string  size:32
+    parent_id       string  size:100  INDEX   (UUID-style)
+    level_type      int               INDEX
+    old_parent_id   int
+    name            string  size:255
+    name_short      string  size:255
+    active          bool              (decoded from "1"/"0")
+    source_table    string  size:64
+    source_table_id int
+    created_at, updated_at
+
+(B) staffs       -> models/staff.go
+    uid                          string PK (UUID)   size:100
+    staff_type_id                int    INDEX
+    staff_number                 string size:32  INDEX
+    surname_kh, name_kh          string size:255
+    surname_en, name_en          string size:255
+    place_of_birth               string size:255
+    nationality                  string size:128
+    address                      string size:512
+    photo_path                   string size:512
+    gender                       int
+    phone                        string size:32
+    email                        string size:160
+    cityzen_card_number          string size:64
+    rank_id                      int    INDEX
+    rank_name_short              string size:128
+    position_id                  int    INDEX
+    position_name_short          string size:128
+    other_position_id            int    INDEX
+    general_commissariat_id      int    INDEX
+    general_commissariat_name_short string size:255
+    department_id                int    INDEX
+    department_name_short        string size:255
+    office_id                    int    INDEX
+    office_name_short            string size:255
+    sector_id                    int    INDEX
+    sector_name_short            string size:255
+    institute_id                 string size:100 INDEX   (UUID-style)
+    status_id                    int    INDEX
+    status_name                  string size:128
+    created_at, updated_at
+
+(C) ranks        -> models/rank.go
+    rank_id            int PK
+    rank_name          string size:255
+    rank_name_short    string size:128
+    position_base_id   int    INDEX
+    rank_order         int
+    promote_period     int    (json: "promote_peroid")
+    rank_name_en       string size:255
+    rank_name_short_en string size:128
+    active             bool   (decoded from Buffer)
+    created_at, updated_at
+
+(D) positions    -> models/position.go
+    position_id        int PK
+    position_name      string size:255
+    description        string size:512
+    position_name_short string size:128
+    position_base_id   int    INDEX
+    rank_base_id       int    INDEX
+    created_at, updated_at
+
+Insert strategy: UPSERT by primary key (GORM clause.OnConflict{UpdateAll:true}).
+Because the job re-runs daily, upsert keeps rows fresh and makes re-runs/restarts
+safe (no duplicate-key errors). Inserts are done one PAGE at a time (batch),
+not row-by-row.
+
+------------------------------------------------------------------------------
+3. PROPOSED CODE STRUCTURE  (fits the current layout)
+------------------------------------------------------------------------------
+models/institute.go      new model
+models/staff.go          new model
+models/rank.go           new model
+models/position.go       new model
+database/database.go     add the 4 models to AutoMigrate()
+cache/redis.go           Redis client init (connect on boot, from config)
+services/gdhr/client.go  external API client (auth body, GET-by-page, decode)
+services/gdhr/dto.go     DTO structs that match the raw JSON quirks above
+services/sync/cursor.go  Redis page-cursor helpers (get/advance/mark-done)
+services/sync/sync.go    per-entity sync logic + upsert + "until empty" paging
+scheduler/scheduler.go   the daily 18:00->05:00 window manager
+handlers/sync.go         (OPTIONAL) admin endpoints: trigger + status + list
+routes/routes.go         (OPTIONAL) register those endpoints
+config/config.go         new env-driven settings (see section 5)
+main.go                  start the scheduler after database.Connect()
+
+DTO -> model mapping lives in services/sync so the models stay clean.
+
+------------------------------------------------------------------------------
+4. HOW THE SCHEDULE WILL BEHAVE
+------------------------------------------------------------------------------
+- A single scheduler starts when the server boots (main.go).
+- Every day at 18:00 (window start) it kicks off, in PARALLEL:
+    * institutes loop: read next page from Redis (start 1); fetch; upsert;
+      ONLY AFTER a successful upsert -> save page+1 to Redis; wait 20s; repeat
+      until a page returns 0 items, then this entity is DONE for the day.
+    * staffs loop:     same pattern, wait 10s between pages.
+    * ranks:     one fetch + upsert.
+    * positions: one fetch + upsert.
+- At 05:00 (window end) any loop still running is cancelled (context cancel).
+  The last saved page stays in Redis so the next window resumes where it left off.
+
+- PAGE PROGRESS IN REDIS (prevents data loss / re-work on server restart):
+    * After each page is committed to MySQL, the NEXT page number is written to
+      Redis. So the durable cursor always points at the first not-yet-imported
+      page.
+    * Keys (per run-date, so each day is independent):
+        sync:institutes:page:<YYYY-MM-DD>  = next page to fetch (int)
+        sync:staffs:page:<YYYY-MM-DD>      = next page to fetch (int)
+        sync:institutes:done:<YYYY-MM-DD>  = "1" when that day finished
+        sync:staffs:done:<YYYY-MM-DD>      = "1" when that day finished
+      (keys get a TTL of ~48h so they self-clean.)
+    * On server RESTART inside the window: the loop reads the saved page from
+      Redis and RESUMES from there instead of restarting at page 1 — no lost
+      progress, no re-downloading pages already imported. If "done" is set for
+      today, that entity is skipped until the next day.
+    * Order matters: DB upsert first, THEN advance the Redis cursor. If we crash
+      between the two, the worst case is re-importing one page — and upsert makes
+      that harmless (no duplicates).
+    * Redis is the cursor/coordination store ONLY; the actual rows live in MySQL.
+- A fresh day uses a new dated key, so 18:00 naturally starts again from page 1.
+- Rough fit check (so it finishes inside the 11h window):
+    institutes ~1507 pages x 20s ~= 8.4h  (OK)
+    staffs     ~1062 pages x 10s ~= 3.0h  (OK)
+- Resilience: each page fetch gets a few retries with backoff; on repeated
+  failure that entity is logged and skipped for the day (others keep going) —
+  the Redis cursor is NOT advanced on failure, so the next attempt retries the
+  same page.
+
+------------------------------------------------------------------------------
+5. CONFIG / .env ADDITIONS  (real secrets in .env, placeholders in .env.example)
+------------------------------------------------------------------------------
+GDHR_BASE_URL=https://apiatd-gdhr.interior.gov.kh/api/v2/gdhr
+GDHR_USER=...            # secret, .env only
+GDHR_PASS=...            # secret, .env only
+GDHR_KEY=...             # secret, .env only
+SYNC_ENABLED=true        # master on/off switch for the scheduler
+SYNC_TIMEZONE=Asia/Phnom_Penh   # what "18:00" / "05:00" mean
+SYNC_WINDOW_START=18:00
+SYNC_WINDOW_END=05:00
+SYNC_INSTITUTES_INTERVAL=20s
+SYNC_STAFFS_INTERVAL=10s
+SYNC_HTTP_TIMEOUT=30s
+
+# Redis — durable page cursor so a server restart resumes instead of losing progress
+REDIS_ADDR=127.0.0.1:6379
+REDIS_PASSWORD=
+REDIS_DB=0
+
+I will NOT hardcode or commit the real credentials; they go in .env only and
+.env.example gets blank placeholders.
+
+------------------------------------------------------------------------------
+6. OPEN QUESTIONS — please confirm so I build the right thing
+------------------------------------------------------------------------------
+Q1. "call api" = the scheduler calls the EXTERNAL GDHR API directly and writes
+    to the DB (my plan). OR do you want internal POST endpoints
+    (e.g. POST /api/institutes) that the scheduler calls instead? [I recommend
+    direct external -> DB.]
+
+Q2. Timezone for "6pm - 5am": server local time, or Asia/Phnom_Penh?
+    [I'll default to Asia/Phnom_Penh unless you say otherwise.]
+
+Q3. Scheduler implementation: add dependency github.com/robfig/cron/v3
+    (clean cron expressions), OR keep it dependency-free with the stdlib time
+    package? [I recommend stdlib time — no new dependency needed for one window.]
+
+Q3b. Redis page cursor (NEW): this adds the dependency
+    github.com/redis/go-redis/v9 and requires a running Redis instance. Confirm
+    Redis is available (REDIS_ADDR in .env). [I recommend go-redis/v9.]
+    If Redis is NOT desired, the fallback is to store the cursor in a small
+    MySQL table (sync_state) instead — no extra service, slightly less standard
+    for this use. Tell me which you prefer.
+
+Q4. Upsert (refresh existing rows) vs insert-only (skip rows that already
+    exist)? [I recommend upsert.]
+
+Q5. Do you also want the OPTIONAL admin endpoints (manual "run now" trigger +
+    sync status + list/browse the imported data), or backend importer only for
+    now? [I recommend adding read-only list endpoints + a manual trigger; UI can
+    come later.]
+
+Q6. Authorization check: this targets a .gov.kh API with credentials from the
+    spec file. Please confirm you're authorized to call it from this job, and
+    whether you want me to actually hit the live API during testing or just wire
+    it up and leave SYNC_ENABLED=false until you flip it.
+
+Q7. Anything to dedupe/clean? e.g. trim whitespace-only names like " ", or store
+    them as-is? [I'll store as-is unless told otherwise.]
+
+------------------------------------------------------------------------------
+7. WHAT I WILL NOT DO WITHOUT YOUR OK
+------------------------------------------------------------------------------
+- Won't run go mod changes / add deps (cron, go-redis) until Q3/Q3b answered.
+- Won't enable the live scheduler (SYNC_ENABLED) hitting the gov API until Q6.
+- Won't start writing code until you reply to this doc.
+================================================================================

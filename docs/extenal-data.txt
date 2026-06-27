@@ -1,0 +1,144 @@
+
+1- public-institutes
+
+curl --location 'https://apiatd-gdhr.interior.gov.kh/api/v2/gdhr/public-institutes/1' \
+--header 'Content-Type: application/json' \
+--data-raw '{
+  "u": "ksmart.lion@gmail.com",
+  "p": "123#@!%$#@ASRDRSRSWWRWRWRSSAWAWAWRSRSHFD2223fffscxffsdsd",
+  "key": "582347476234fdfddasdduDDTDYTDY443##%$%dtdtdFFFF@@@@@$"
+}'
+
+response data :
+{
+    "page": 1,
+    "pageSize": 0,
+    "totalPages": 1507,
+    "totalItems": 15062,
+    "items": [
+        {
+            "id": "inst-0131c311-30af-11f1-803f-a2dc93f99031",
+            "old_id": "12573",
+            "parent_id": "inst-d41a9660-6c58-11ef-be4e-9009df8638c3",
+            "level_type": 50,
+            "old_parent_id": 0,
+            "name": "ផ្នែកផលិតរបាយការណ៍",
+            "name_short": "ផ្នែ.ផ.របាយការណ៍",
+            "active": "1",
+            "source_table": "sectors",
+            "source_table_id": 12573
+        }
+
+2- public-staffs
+curl --location 'https://apiatd-gdhr.interior.gov.kh/api/v2/gdhr/public-staffs/1' \
+--header 'Content-Type: application/json' \
+--data-raw '{
+  "u": "ksmart.lion@gmail.com",
+  "p": "123#@!%$#@ASRDRSRSWWRWRWRSSAWAWAWRSRSHFD2223fffscxffsdsd",
+  "key": "582347476234fdfddasdduDDTDYTDY443##%$%dtdtdFFFF@@@@@$"
+}'
+
+response data :
+{
+    "total": 106136,
+    "page": 1,
+    "pageSize": 100,
+    "data": [
+        {
+            "uid": "0c42f392-f8d8-474b-86a4-130e5ea7b9d4",
+            "staff_type_id": 1,
+            "staff_number": "68323",
+            "surname_kh": "អ៊ុំ",
+            "name_kh": "ចាន់ភារះ",
+            "surname_en": "OM",
+            "name_en": "CHANPHEARAK",
+            "place_of_birth": "",
+            "nationality": "",
+            "address": "",
+            "photo_path": "",
+            "gender": 1,
+            "phone": "",
+            "email": "",
+            "cityzen_card_number": "",
+            "rank_id": 7,
+            "rank_name_short": "អនុ.ត្រី",
+            "position_id": 2,
+            "position_name_short": "មន្រ្តី",
+            "other_position_id": 1,
+            "general_commissariat_id": 3,
+            "general_commissariat_name_short": "អគ្គ.ភស្តុភារ​-ហិ.វត្ថុ",
+            "department_id": 1,
+            "department_name_short": " ",
+            "office_id": 1,
+            "office_name_short": "",
+            "sector_id": 1,
+            "sector_name_short": "",
+            "institute_id": "inst-c9fb8350-6c54-11ef-be4e-9009df8638c3",
+            "status_id": 3,
+            "status_name": "មរណៈ"
+        },
+
+3 - public-ranks
+curl --location 'https://apiatd-gdhr.interior.gov.kh/api/v2/gdhr/public-ranks' \
+--header 'Content-Type: application/json' \
+--data-raw '{
+  "u": "ksmart.lion@gmail.com",
+  "p": "123#@!%$#@ASRDRSRSWWRWRWRSSAWAWAWRSRSHFD2223fffscxffsdsd",
+  "key": "582347476234fdfddasdduDDTDYTDY443##%$%dtdtdFFFF@@@@@$"
+}'
+
+response data :
+{
+    "status": "",
+    "message": "Operation successful",
+    "data": {
+        "page": 1,
+        "pageSize": 0,
+        "totalPages": 0,
+        "totalItems": 16,
+        "items": [
+            {
+                "rank_id": 1,
+                "rank_name": " ",
+                "rank_name_short": " ",
+                "position_base_id": 0,
+                "rank_order": 0,
+                "promote_peroid": 0,
+                "rank_name_en": "",
+                "rank_name_short_en": "",
+                "active": {
+                    "type": "Buffer",
+                    "data": [
+                        1
+                    ]
+                }
+            }
+
+4- public-positions
+
+curl --location 'https://apiatd-gdhr.interior.gov.kh/api/v2/gdhr/public-positions' \
+--header 'Content-Type: application/json' \
+--data-raw '{
+  "u": "ksmart.lion@gmail.com",
+  "p": "123#@!%$#@ASRDRSRSWWRWRWRSSAWAWAWRSRSHFD2223fffscxffsdsd",
+  "key": "582347476234fdfddasdduDDTDYTDY443##%$%dtdtdFFFF@@@@@$"
+}'
+
+response data :
+{
+    "status": "",
+    "message": "Operation successful",
+    "data": {
+        "page": 1,
+        "pageSize": 0,
+        "totalPages": 0,
+        "totalItems": 242,
+        "items": [
+            {
+                "position_id": 1,
+                "position_name": " ",
+                "description": "",
+                "position_name_short": " ",
+                "position_base_id": 0,
+                "rank_base_id": 0
+            },

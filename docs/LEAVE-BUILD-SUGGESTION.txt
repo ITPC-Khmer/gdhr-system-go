@@ -1,0 +1,260 @@
+=====================================================================
+ LEAVE SYSTEM — BUILD / DEPLOY SUGGESTION
+ (frontend NOT built yet — build it next time with the steps below)
+=====================================================================
+
+WHAT WAS ADDED
+---------------------------------------------------------------------
+Backend (Go / Gin / GORM)
+  models/types.go         + JSONRaw type (arbitrary MySQL JSON columns)
+  models/leave_type.go    LeaveType  -> table `leave_type`
+  models/leave_roles.go   LeaveRole  -> table `leave_roles`
+  models/leave.go         Leave              -> `leave`
+                          LeaveApproval      -> `leave_approval`
+                          LeaveRequesterFile -> `leave_requester_files`
+                          LeaveYear          -> `leave_year`
+  models/staff_institute_role.go  StaffInstituteRole -> `staff_institute_roles`
+  handlers/leave_type.go  CRUD for leave_type + leave_roles
+  handlers/leave.go       CRUD for leave / leave_approval / leave_files /
+                          leave_year + approve/reject workflow
+  handlers/staff_institute_role.go  CRUD (create+update enforce one
+                          moderator / one approval per institute)
+  database/database.go    7 new models registered in AutoMigrate()
+  routes/routes.go        new route groups (see API below)
+
+Frontend (Vue 3 — config driven, source only, NOT rebuilt)
+  src/config/resources.js  7 new resources (leave_types, leave_roles, leaves,
+                           leave_approvals, leave_files, leave_years,
+                           staff_institute_roles)
+  src/components/Sidebar.vue  new "Leave Management" menu group
+  (routes are auto-generated from resources.js — no router edit needed)
+
+API ENDPOINTS  (all under /api, JWT required)
+---------------------------------------------------------------------
+  GET/POST/PUT/DELETE   /leave-types          (writes admin-only)
+  GET/POST/PUT/DELETE   /leave-roles          (writes admin-only)
+  GET                   /leaves               list (enriched leave_type_name)
+  GET                   /leaves/:id
+  POST                  /leaves               any authenticated user; auto-seeds approval
+  (no PUT/DELETE on /leaves — read-only in-app; state changes via the approval
+   workflow. Leaves are view-only for everyone in the UI, incl. admins.)
+  POST                  /leaves/:id/override-approve  admin break-glass  body: {note?}
+  POST                  /leaves/:id/override-reject   admin break-glass  body: {reject_reason?}
+  (the one-shot POST /leaves/:id/approve|reject were REMOVED — admins are
+   view-only for leave; approval happens per-step via /leave-approvals below)
+  GET/POST/PUT/DELETE   /leave-approvals      (writes admin-only)
+  GET/POST/PUT/DELETE   /leave-files          (writes admin-only)
+  GET/POST/PUT/DELETE   /leave-years          (writes admin-only)
+  GET/POST/PUT/DELETE   /staff-institute-roles  (writes admin-only; create &
+                        update reject a 2nd moderator/approval per institute -> 409)
+  POST                  /leave-approvals/:id/approve  approver acts on one task
+                        -> advances chain or finalizes (authenticated)
+  POST                  /leave-approvals/:id/reject   rejects the whole request
+                        body: {reject_reason?}        (authenticated)
+
+AUTOMATIONS
+---------------------------------------------------------------------
+1. "when request live => auto": POST /leaves creates the leave AND, in the
+   same transaction, resolves the approver(s) and inserts `leave_approval`
+   row(s). total_day is auto-computed (inclusive) from start/end when 0.
+   >> The approver-resolution algorithm is the PROCESS FLOW below.
+   >> STATUS: BUILT. seedLeaveApprovals() in handlers/leave.go resolves the
+      first approver via services/leaveflow (FirstApprover) and inserts the
+      pending step. If no manager is configured in the requester's chain the
+      request is left with no approval rows for an admin to handle.
+
+2. "leave_year, when approve leave, insert it": when the approval chain
+   COMPLETES (final approver acts via POST /leave-approvals/:id/approve ->
+   finalizeApproved) the leave is set approved and `leave_year` is upserted for
+   (staff_id, leave_type_id, year-of-start-date): total_day accumulates,
+   max_days/is_reset come from `leave_type`, leave_remaining = max_days -
+   total_day. All atomic. STATUS: implemented.
+
+=====================================================================
+ PROCESS FLOW — who gets inserted into leave_approval
+=====================================================================
+
+A. STAFF <-> INSTITUTE MANAGEMENT  (prerequisite data)
+---------------------------------------------------------------------
+  - One staff can MANAGE many institutes (many-to-many).
+  - For each managed institute the staff holds one or more roles:
+        admin | moderator | approval
+  - Constraint: within ONE institute there is at most ONE moderator AND at
+    most ONE approval (admin may be many).
+  - Institutes form a hierarchy; each institute has a `level_type`.
+    SMALLER level_type = HIGHER authority  (e.g. 10 outranks 40 outranks 50).
+  - MAPPING TABLE: `staff_institute_roles(staff_id, institute_id, role)` —
+    BUILT (model + migration + CRUD API /api/staff-institute-roles + Vue
+    "Manage Roles"). The one-moderator / one-approval-per-institute rule is
+    enforced in the create AND update handlers. The flow below reads from it.
+
+B. ON CREATE LEAVE -> RESOLVE APPROVER  ("request live => auto")
+---------------------------------------------------------------------
+  1. Match a `leave_roles` row by:
+        leave_type  +  requested days within [min_duration, max_duration]
+     and read `approve_level` from it (maps to institutes.level_type; see the
+     NOTE below for how it is — and is NOT — used).
+
+  2. Determine the START tier = the REQUESTING STAFF'S OWN level_type.
+        Resolve it from the staff's institute chain (`institute_ids`) -> the
+        `level_type` of the requester's institute.
+        >> The start tier is ALWAYS the requester's level_type. It is NOT
+           approve_level. (level_type: SMALLER number = HIGHER authority.)
+
+  3. Walk tiers from the START tier toward HIGHER authority — i.e. to the next
+     SMALLER level_type THAT ACTUALLY EXISTS. Tiers are NOT fixed steps of 10:
+     use the real level_type values present in `institutes` (e.g. 50, 40, 30,
+     25, 20, 10), skipping any that don't exist. Walk down to level_type = 10:
+
+        for L in (start_tier, next-smaller EXISTING tier, ... , 10):
+            a. find a staff MANAGING an institute at level_type L,
+               role = 'moderator'   -> if found: INSERT into leave_approval, STOP.
+            b. else role = 'approval' at level_type L
+                                    -> if found: INSERT into leave_approval, STOP.
+            c. else: go to the next-smaller existing tier.
+
+     Stop on the FIRST manager found (moderator preferred over approval),
+     or after level_type = 10.
+
+  NOTE on approve_level:
+     Per the worked examples the START tier is ALWAYS the requester's own
+     level_type, regardless of approve_level. approve_level still comes from
+     `leave_roles` (and equals some institutes.level_type) but it does NOT set
+     the start tier. Confirm its real purpose before coding — likely a minimum
+     required authority / a cap on how far the walk may stop, or it feeds
+     max_level. Until confirmed, drive the walk purely off the requester's
+     level_type.
+
+  EXAMPLES (from spec):
+     a) approve_level = 50, requester level_type = 40  ->  START at 40
+          40 (moderator? else approval?) -> 30 -> 20 -> 10 ; first match wins.
+     b) approve_level = 50, requester level_type = 30  ->  START at 30
+          30 -> 20 -> 10 ; first match wins.
+     c) approve_level = 20, requester level_type = 50  ->  START at 50
+          50 (moderator? else approval?) -> 40 -> 30 -> 20 -> 10 ; stop at the
+          first manager found.
+     In EVERY case the walk STARTS at the requester's own level_type and moves
+     to higher authority (next smaller existing level_type), stopping at the
+     first moderator/approval, otherwise stopping at level_type 10.
+
+C. ON FINAL APPROVE -> leave_year upsert  (see AUTOMATIONS #2 above)
+   Runs once, when the request becomes fully approved (end of section D).
+
+
+D. APPROVER TASK WORKFLOW — process a pending step   (BUILT)
+---------------------------------------------------------------------
+  Each `leave_approval` row is a TASK for the staff named in it. The workflow
+  is multi-step: one approver acts, then the chain either ends or spawns the
+  next approver's task. Sections B and D share the SAME walk (see B step 3).
+
+  TASK LIST (per approver)
+     When an approver logs in they see every request awaiting them =
+        leave_approval WHERE staff_id = <current user> AND status = 'pending'
+     joined to `leave` for the request details.
+     (Queryable: GET /leave-approvals?staff_id=<me>&status=pending.)
+
+  REJECT  (one rejection kills the whole request)
+     1. this leave_approval row -> status='rejected', approved_at=now
+     2. MAIN `leave` -> status='rejected', reject_reason=<reason>,
+        approved_by=<this approver> (who), approved_at=now (when)
+     3. STOP — no further approvers.
+
+  APPROVE  (advance the chain)
+     1. this leave_approval row -> status='approved', approved_at=now
+     2. Is the chain COMPLETE?
+          COMPLETE  when   current approver's role = 'approval'
+                    AND    requester.level_type >= current approver.level_type
+                           (approver is at EQUAL-OR-HIGHER authority than the
+                            requester; remember: smaller level_type = higher).
+          -> if COMPLETE: MAIN `leave` -> status='approved',
+             approved_by=<this approver>, approved_at=now, then run the
+             leave_year upsert (section C). DONE.
+     3. else NOT complete -> find the NEXT approver and INSERT a new pending
+        leave_approval row for them, using the SAME walk as section B but
+        restricted to role = 'approval':
+          - look for a role='approval' manager at the current tier, then the
+            next-smaller EXISTING level_type, ... up to level_type 10.
+          - insert the pending row (l_level / approve_level = next step), STOP.
+        That approver now sees the task; the cycle repeats from TASK LIST.
+
+  EXAMPLE  (requester level_type = 40)
+     - create-time routing (B) picked a moderator at 40 -> pending task.
+     - moderator(40) approves -> role != 'approval' -> find next 'approval':
+       e.g. approval at 30 -> insert pending task for them.
+     - approval(30) approves -> role='approval' AND 40 >= 30 -> COMPLETE ->
+       MAIN leave = approved, leave_year upserted.
+
+  STATUS: BUILT.
+    - POST /leave-approvals/:id/approve  -> ApproveLeaveApproval(): marks the
+      step approved, then completes the leave (role='approval' AND
+      requester.level_type >= step level) or seeds the next 'approval' task via
+      leaveflow.NextApproval(). No further approver => finalized as approved.
+    - POST /leave-approvals/:id/reject   -> RejectLeaveApproval(): rejects the
+      step and the whole leave (reason/who/when on the main row).
+    - The one-shot POST /leaves/:id/approve|reject were REMOVED (admins are
+      view-only for leave).
+    - ADMIN BREAK-GLASS (stuck requests only): POST /leaves/:id/override-approve
+      and /override-reject (admin-only) force the final state, flip pending
+      steps, and (approve) upsert leave_year. Each MERGES an audit stamp under
+      the "override" key of the leave's approve_document (preserving other keys):
+      {...existing, override:{by,action,note,at}}. Surfaced in the
+      timeline page (LeaveDetail.vue) as an amber "Admin override" panel shown
+      to admins only while the request is pending.
+  Routing lives in services/leaveflow (FirstApprover / NextApproval /
+  RequesterLevel). approve_level from leave_roles is NOT used to drive the
+  walk — the requester's own level_type does (as documented in section B NOTE).
+  AUTHZ: the two task actions verify the caller IS the assigned approver via
+  users.staff_id (== the leave_approval row's staff_id). ADMINS ARE VIEW-ONLY
+  for leave and get 403 if they try to act (they can view requests + the
+  timeline). A non-admin with no/mismatched staff_id also gets 403. Link an
+  account to a staff member by setting staff_id on the user (User form "Linked
+  staff UID", or POST/PUT /users {staff_id}).
+
+  FRONTEND: Leave Requests rows have a "view" link -> /leaves/:id, a detail
+  page (views/leaves/LeaveDetail.vue) showing the request summary + the
+  approval steps as a vertical timeline. Approve/reject controls (there and in
+  the Leave Approvals list) render ONLY for the assigned approver — never for
+  admins. The leaves resource is config-flagged readOnly: true, so the UI shows
+  NO Add/Edit/Delete (and the /leaves/new + /leaves/:id/edit routes are not
+  generated); matching the backend, which exposes no PUT/DELETE on /leaves.
+
+ASSUMPTIONS / REFINE LATER
+---------------------------------------------------------------------
+  - All *_id columns are plain indexed columns, NO DB foreign keys
+    (matches the existing Staff/Institute models & their sync importer).
+  - The PROCESS FLOW above replaces the placeholder seedLeaveApprovals().
+    Its mapping table (staff_institute_roles, section A) is already built, so
+    the flow can be implemented directly against it.
+  - For a multi-step chain (one leave_approval row per tier instead of the
+    first match) keep walking after a match and insert one row per resolved
+    approver, incrementing approve_level / l_level.
+  - leave.staff_id is not joined to a staff name (the Go Staff model keys on
+    `uid`, not `staff_id`). Only leave_type_name is resolved at query time.
+  - JSON columns (approve_document, staffs_info, files) are stored/returned
+    but intentionally left out of the Vue forms; add a JSON editor if needed.
+
+BUILD STEPS (run next time)
+---------------------------------------------------------------------
+  # 1. Frontend (produces frontend/dist served by the Go SPA route)
+  cd frontend
+  npm install            # if deps changed / first build
+  npm run build
+
+  # 2. Backend
+  cd ..
+  go build ./...         # already verified compiling
+  go run .               # or your usual run command
+
+  # 3. AutoMigrate runs on startup and creates the 7 tables if missing.
+  #    Seed reference data first if starting empty:
+  #    mysql ... < docs/Leave-Type-Data.sql   (leave_type + leave_roles rows)
+
+NOTES
+---------------------------------------------------------------------
+  - AutoMigrate will CREATE the tables but will not retro-add the exact
+    composite UNIQUE/FK names from LEAVE-SYSTEM-SCHEMA.txt. The unique keys
+    that matter for the upsert logic ARE created:
+      leave_year   uq_leave_year (staff_id, leave_type_id, l_year)
+      leave_approval leave_id_2  (leave_id, staff_id, approve_level)
+  - If the real tables already exist (they have data per the schema dump),
+    AutoMigrate only adds missing columns — it will not drop/alter data.

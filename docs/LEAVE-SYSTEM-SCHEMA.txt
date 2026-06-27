@@ -1,0 +1,308 @@
+/* =====================================================================
+   LEAVE SYSTEM - SCHEMA
+   ---------------------------------------------------------------------
+/* ---------------------------------------------------------------------
+   leave
+   --------------------------------------------------------------------- */
+CREATE TABLE `leave` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `staff_id` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+  `ref_number` varchar(700) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `leave_type_id` bigint NOT NULL,
+  `start_date` date NOT NULL,
+  `end_date` date NOT NULL,
+  `total_day` double DEFAULT '0',
+  `reason` varchar(1000) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `status` enum('pending','approved','rejected') CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT 'pending',
+  `approved_by` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `approved_at` timestamp NULL DEFAULT NULL,
+  `attachment` text CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci,
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `file_name` text CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci,
+  `seq` int DEFAULT '0',
+  `reject_reason` varchar(1000) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `approve_document` json DEFAULT NULL,
+  `status_document` enum('pending','completed') CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT 'pending',
+  `required_document` tinyint DEFAULT '0',
+  `arrived_lv10` tinyint DEFAULT '0',
+  `go_abroad` int DEFAULT '0',
+  `staffs_info` json DEFAULT NULL,
+  `phone` varchar(700) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL,
+  PRIMARY KEY (`id`) USING BTREE,
+  KEY `leave_type_id` (`leave_type_id`) USING BTREE,
+  KEY `leave_ibfk_1` (`staff_id`) USING BTREE,
+  KEY `leave_ibfk_3` (`approved_by`) USING BTREE,
+  CONSTRAINT `leave_ibfk_1` FOREIGN KEY (`staff_id`) REFERENCES `staffs` (`staff_id`),
+  CONSTRAINT `leave_ibfk_2` FOREIGN KEY (`leave_type_id`) REFERENCES `leave_type` (`id`),
+  CONSTRAINT `leave_ibfk_3` FOREIGN KEY (`approved_by`) REFERENCES `staffs` (`staff_id`)
+) ENGINE=InnoDB AUTO_INCREMENT=243 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+
+/* ---------------------------------------------------------------------
+   leave_approval
+   --------------------------------------------------------------------- */
+CREATE TABLE `leave_approval` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `l_type` enum('leave','mission') CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT 'leave',
+  `leave_id` bigint DEFAULT NULL,
+  `staff_id` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `l_level` int DEFAULT NULL,
+  `status` enum('pending','approved','rejected') CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT 'pending',
+  `show_type` int DEFAULT NULL,
+  `created_at` datetime DEFAULT NULL,
+  `approved_at` datetime DEFAULT NULL,
+  `max_level` int DEFAULT '1',
+  `approve_level` int DEFAULT NULL,
+  `role_name` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT 'normal',
+  `moderator_type` tinyint DEFAULT '0',
+  `institute_id` varchar(45) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `n` int DEFAULT '0',
+  PRIMARY KEY (`id`) USING BTREE,
+  UNIQUE KEY `leave_id_2` (`leave_id`,`staff_id`,`approve_level`) USING BTREE,
+  KEY `l_type` (`l_type`) USING BTREE,
+  KEY `leave_id` (`leave_id`) USING BTREE,
+  KEY `staff_id` (`staff_id`) USING BTREE,
+  KEY `l_level` (`l_level`) USING BTREE,
+  KEY `status` (`status`) USING BTREE,
+  KEY `show_type` (`show_type`) USING BTREE,
+  CONSTRAINT `leave_approval_ibfk_1` FOREIGN KEY (`staff_id`) REFERENCES `staffs` (`staff_id`) ON DELETE CASCADE ON UPDATE RESTRICT,
+  CONSTRAINT `leave_approval_ibfk_2` FOREIGN KEY (`leave_id`) REFERENCES `leave` (`id`) ON DELETE CASCADE ON UPDATE RESTRICT
+) ENGINE=InnoDB AUTO_INCREMENT=656 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+
+/* ---------------------------------------------------------------------
+   leave_requester_files
+   --------------------------------------------------------------------- */
+CREATE TABLE `leave_requester_files` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT,
+  `leave_id` bigint NOT NULL,
+  `comment` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+  `message_type` enum('chat','description') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'description',
+  `parent_id` int unsigned DEFAULT NULL,
+  `staff_id` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `task_id` int unsigned NOT NULL,
+  `added_by` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `last_updated_by` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `status` enum('sent','read') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'sent',
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  `files` json DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `fk_leave_files_staff_id` (`staff_id`),
+  KEY `fk_leave_files_task_id` (`task_id`),
+  KEY `fk_leave_files_added_by` (`added_by`),
+  KEY `fk_leave_files_last_updated_by` (`last_updated_by`),
+  KEY `fk_leave_files_leave_id` (`leave_id`),
+  KEY `idx_created_at` (`created_at`),
+  KEY `fk_leave_files_parent_id` (`parent_id`),
+  CONSTRAINT `fk_leave_files_added_by` FOREIGN KEY (`added_by`) REFERENCES `staffs` (`staff_id`) ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT `fk_leave_files_last_updated_by` FOREIGN KEY (`last_updated_by`) REFERENCES `staffs` (`staff_id`) ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT `fk_leave_files_leave_id` FOREIGN KEY (`leave_id`) REFERENCES `leave` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `fk_leave_files_staff_id` FOREIGN KEY (`staff_id`) REFERENCES `staffs` (`staff_id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=45 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+/* ---------------------------------------------------------------------
+   leave_year
+   --------------------------------------------------------------------- */
+CREATE TABLE `leave_year` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `staff_id` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+  `leave_type_id` bigint NOT NULL,
+  `l_year` int NOT NULL,
+  `total_day` double DEFAULT '0',
+  `is_reset` tinyint(1) DEFAULT '0',
+  `max_days` int DEFAULT '0',
+  `leave_remaining` double DEFAULT '0',
+  PRIMARY KEY (`id`) USING BTREE,
+  UNIQUE KEY `staff_id` (`staff_id`,`leave_type_id`,`l_year`) USING BTREE,
+  KEY `leave_type_id` (`leave_type_id`) USING BTREE,
+  CONSTRAINT `leave_year_ibfk_1` FOREIGN KEY (`staff_id`) REFERENCES `staffs` (`staff_id`) ON DELETE RESTRICT ON UPDATE RESTRICT,
+  CONSTRAINT `leave_year_ibfk_2` FOREIGN KEY (`leave_type_id`) REFERENCES `leave_type` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT
+) ENGINE=InnoDB AUTO_INCREMENT=1626 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+
+/* ---------------------------------------------------------------------
+   leave_type
+   --------------------------------------------------------------------- */
+CREATE TABLE `leave_type` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `leave_key` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `type_name` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+  `type_name_s` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+  `description` varchar(1000) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `is_reset` tinyint(1) DEFAULT '0',
+  `max_days` int DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`) USING BTREE,
+  UNIQUE KEY `type_name` (`type_name`) USING BTREE
+) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+
+/* ---------------------------------------------------------------------
+   leave_roles
+   --------------------------------------------------------------------- */
+CREATE TABLE `leave_roles` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `leave_type_id` bigint DEFAULT NULL,
+  `leave_type` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+  `name` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+  `min_duration` int NOT NULL,
+  `limit_days` int NOT NULL,
+  `min_duration_show` int NOT NULL DEFAULT '1',
+  `max_duration` int NOT NULL,
+  `approve_level` int NOT NULL,
+  `staff_type` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+  PRIMARY KEY (`id`) USING BTREE,
+  KEY `leave_type_id` (`leave_type_id`) USING BTREE,
+  CONSTRAINT `leave_roles_ibfk_1` FOREIGN KEY (`leave_type_id`) REFERENCES `leave_type` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT
+) ENGINE=InnoDB AUTO_INCREMENT=118 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+
+/* ---------------------------------------------------------------------
+   staff_institute_roles
+   Maps a staff member to an institute they manage, with a role. Read by the
+   leave-approval routing (section 2 below). A staff can manage many
+   institutes and hold several roles. Business rule (enforced in app logic,
+   not by a constraint): within one institute at most ONE moderator and ONE
+   approval; admin may be many.
+   --------------------------------------------------------------------- */
+CREATE TABLE `staff_institute_roles` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT,
+  `staff_id` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+  `institute_id` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+  `role` enum('admin','moderator','approval') CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`) USING BTREE,
+  UNIQUE KEY `uq_staff_institute_role` (`staff_id`,`institute_id`,`role`) USING BTREE,
+  KEY `staff_id` (`staff_id`) USING BTREE,
+  KEY `institute_id` (`institute_id`) USING BTREE,
+  KEY `role` (`role`) USING BTREE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+
+/* =====================================================================
+   PROCESS FLOW — LEAVE APPROVAL ROUTING
+   How a leave request auto-populates `leave_approval` (who must approve).
+   =====================================================================
+
+   ---------------------------------------------------------------------
+   1. STAFF <-> INSTITUTE MANAGEMENT (prerequisite)
+   ---------------------------------------------------------------------
+   - One staff can MANAGE many institutes (many-to-many).
+   - For each managed institute the staff holds one or more roles:
+         admin | moderator | approval
+   - Rule: within ONE institute there is at most ONE `moderator` and at most
+     ONE `approval` (admin may be many).
+   - Institutes are hierarchical; each institute has a `level_type`.
+     SMALLER level_type = HIGHER authority  (10 outranks 40 outranks 50).
+   - This mapping is the `staff_institute_roles` table defined above; it is
+     read by the routing flow below.
+   - CRUD for it is built (API: /api/staff-institute-roles; Vue: "Manage
+     Roles"). The routing flow in sections 2 and 4 is BUILT in
+     services/leaveflow + handlers/leave.go.
+
+   ---------------------------------------------------------------------
+   2. ON CREATE LEAVE -> RESOLVE APPROVER  ("when request live => auto")
+   ---------------------------------------------------------------------
+   Step 1. Match a `leave_roles` row by:
+              leave_type  +  requested days in [min_duration, max_duration]
+   Step 2. Read `approve_level` from that row.
+              approve_level  ==  `level_type` in `institutes`.
+   Step 3. Resolve the requester's institute context:
+              read requesting staff's `institute_ids` (institute chain), then
+              load the `level_type` of each of those institutes.
+   Step 4. Walk tiers from the start level toward HIGHER authority
+           (DECREASING level_type number), tier by tier, down to 10:
+
+              for L in (start_level, next-higher tier, ... , 10):
+                  a. find staff MANAGING an institute at level_type L
+                     with role = 'moderator'
+                        -> if found: INSERT into leave_approval, STOP.
+                  b. else find staff managing at level_type L
+                     with role = 'approval'
+                        -> if found: INSERT into leave_approval, STOP.
+                  c. else: go to the next-higher tier (smaller level_type).
+
+           Stop on the first manager found, or after level_type = 10.
+
+   ---------------------------------------------------------------------
+   EXAMPLE
+   ---------------------------------------------------------------------
+   leave_roles gives approve_level = 50, requesting staff level_type = 40:
+     - search level_type 40 for a 'moderator'; if none, an 'approval'
+     - if level 40 has no manager -> 30 -> 20 -> 10
+     - first match found is inserted into leave_approval; stop at 10.
+   (The walk starts at the requester's own level_type, 40.)
+
+   ---------------------------------------------------------------------
+   3. ON FINAL APPROVE -> leave_year
+   ---------------------------------------------------------------------
+   Runs ONCE, when the request becomes fully approved (end of section 4).
+   Upsert `leave_year` (staff_id, leave_type_id, l_year): accumulate
+   total_day, set max_days / is_reset from `leave_type`,
+   leave_remaining = max_days - total_day.
+
+   ---------------------------------------------------------------------
+   4. APPROVER TASK WORKFLOW — process a pending step   (NOT built yet)
+   ---------------------------------------------------------------------
+   Each `leave_approval` row is a TASK for the staff named in it. The flow is
+   multi-step: one approver acts, then the chain either ends or spawns the
+   next approver's task. Sections 2 and 4 share the SAME walk (section 2 step 4).
+
+   TASK LIST (per approver)
+      On login an approver sees every request awaiting them =
+         leave_approval WHERE staff_id = <current user> AND status = 'pending'
+      joined to `leave` for the request details.
+      (Already queryable: GET /leave-approvals?staff_id=<me>&status=pending;
+       the act-on-task logic below is what still needs building.)
+
+   REJECT  (one rejection kills the whole request)
+      1. this leave_approval row -> status='rejected', approved_at=now
+      2. MAIN `leave` -> status='rejected', reject_reason=<reason>,
+         approved_by=<this approver> (who), approved_at=now (when)
+      3. STOP — no further approvers.
+
+   APPROVE  (advance the chain)
+      1. this leave_approval row -> status='approved', approved_at=now
+      2. Is the chain COMPLETE?
+           COMPLETE  when   current approver's role = 'approval'
+                     AND    requester.level_type >= current approver.level_type
+                            (approver at EQUAL-OR-HIGHER authority than the
+                             requester; smaller level_type = higher).
+           -> if COMPLETE: MAIN `leave` -> status='approved',
+              approved_by=<this approver>, approved_at=now, then run the
+              leave_year upsert (section 3). DONE.
+      3. else NOT complete -> find the NEXT approver and INSERT a new pending
+         leave_approval row, using the SAME walk as section 2 but restricted to
+         role = 'approval':
+           - look for a role='approval' manager at the current tier, then the
+             next-smaller EXISTING level_type, ... up to level_type 10.
+           - insert the pending row (l_level / approve_level = next step), STOP.
+         That approver then sees the task; the cycle repeats from TASK LIST.
+
+   EXAMPLE  (requester level_type = 40)
+      - section 2 routing picked a moderator at 40 -> pending task.
+      - moderator(40) approves -> role != 'approval' -> find next 'approval':
+        e.g. approval at 30 -> insert pending task for them.
+      - approval(30) approves -> role='approval' AND 40 >= 30 -> COMPLETE ->
+        MAIN leave = approved, leave_year upserted.
+
+   STATUS: BUILT.
+     POST /leave-approvals/:id/approve  -> approve a step (advance/complete)
+     POST /leave-approvals/:id/reject   -> reject the whole request
+   Routing lives in services/leaveflow. (The one-shot POST /leaves/:id/
+   approve|reject were removed — admins are view-only for leave.)
+   AUTHZ: the caller must be the assigned approver (users.staff_id == the
+   leave_approval row's staff_id). ADMINS ARE VIEW-ONLY and get 403 if they try
+   to approve/reject; they can still view requests and the approval timeline
+   (frontend: /leaves/:id, views/leaves/LeaveDetail.vue).
+   BREAK-GLASS: admin-only POST /leaves/:id/override-approve|override-reject
+   force-resolve a STUCK request (flip pending steps, finalize, approve =>
+   upsert leave_year). Audited by MERGING an "override" key into
+   leave.approve_document (other keys preserved): {...existing,
+   override:{by,action,note,at}}.
+   ===================================================================== */
