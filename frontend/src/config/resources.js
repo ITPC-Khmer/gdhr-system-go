@@ -566,6 +566,7 @@ export const resources = {
     icon: 'calendar',
     pk: 'id',
     pkEditable: false,
+    readOnly: true, // auto-upserted when a leave is approved; not hand-managed
     searchPlaceholder: 'Search staff…',
     columns: [
       { key: 'id', label: 'ID' },

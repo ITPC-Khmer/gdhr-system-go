@@ -45,7 +45,7 @@ API ENDPOINTS  (all under /api, JWT required)
   GET                   /leave-approvals      read-only (auto-seeded + workflow-
   GET                   /leave-approvals/:id  driven; act via approve/reject below)
   GET/POST/PUT/DELETE   /leave-files          (writes admin-only)
-  GET/POST/PUT/DELETE   /leave-years          (writes admin-only)
+  GET                   /leave-years          read-only (auto-upserted on approve)
   GET/POST/PUT/DELETE   /staff-institute-roles  (writes admin-only; create &
                         update reject a 2nd moderator/approval per institute -> 409)
   POST                  /leave-approvals/:id/approve  approver acts on one task

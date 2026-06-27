@@ -502,7 +502,4 @@ var leaveYearFilter = []string{"staff_id", "leave_type_id", "l_year", "is_reset"
 func ListLeaveYears(c *gin.Context) {
 	listResource[models.LeaveYear](c, leaveYearSearch, leaveYearFilter, "l_year DESC, staff_id ASC")
 }
-func GetLeaveYear(c *gin.Context)    { getResource[models.LeaveYear](c, "id") }
-func CreateLeaveYear(c *gin.Context) { createResource[models.LeaveYear](c) }
-func UpdateLeaveYear(c *gin.Context) { updateResource[models.LeaveYear](c, "id") }
-func DeleteLeaveYear(c *gin.Context) { deleteResource[models.LeaveYear](c, "id") }
+func GetLeaveYear(c *gin.Context) { getResource[models.LeaveYear](c, "id") }

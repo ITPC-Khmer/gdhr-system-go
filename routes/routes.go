@@ -125,9 +125,13 @@ func Setup(cfg *config.Config) *gin.Engine {
 			registerCRUD(protected, "/leave-files",
 				handlers.ListLeaveFiles, handlers.GetLeaveFile,
 				handlers.CreateLeaveFile, handlers.UpdateLeaveFile, handlers.DeleteLeaveFile)
-			registerCRUD(protected, "/leave-years",
-				handlers.ListLeaveYears, handlers.GetLeaveYear,
-				handlers.CreateLeaveYear, handlers.UpdateLeaveYear, handlers.DeleteLeaveYear)
+			// Leave balances are auto-upserted when a leave is approved — not
+			// hand-managed. Read-only (list + get).
+			leaveYears := protected.Group("/leave-years")
+			{
+				leaveYears.GET("", handlers.ListLeaveYears)
+				leaveYears.GET("/:id", handlers.GetLeaveYear)
+			}
 
 			// Staff<->institute management mapping (drives approval routing).
 			registerCRUD(protected, "/staff-institute-roles",
