@@ -20,6 +20,23 @@
       </div>
     </div>
 
+    <!-- Leave requests -->
+    <div>
+      <div class="mb-3 flex items-center justify-between">
+        <h3 class="font-bold text-slate-800">Leave requests</h3>
+        <RouterLink to="/leaves" class="text-sm font-medium text-primary-600 hover:text-primary-700">View all →</RouterLink>
+      </div>
+      <div class="grid grid-cols-2 gap-5 xl:grid-cols-4">
+        <RouterLink v-for="card in leaveCards" :key="card.label" :to="card.to" class="card p-5 transition hover:border-primary-300 hover:shadow-md">
+          <div class="grid h-11 w-11 place-items-center rounded-xl" :class="card.bg">
+            <Icon :name="card.icon" :size="22" :class="card.fg" />
+          </div>
+          <p class="mt-4 text-3xl font-extrabold" :class="card.value === 0 ? 'text-slate-400' : 'text-slate-900'">{{ card.value }}</p>
+          <p class="mt-1 text-sm text-slate-500">{{ card.label }}</p>
+        </RouterLink>
+      </div>
+    </div>
+
     <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
       <!-- Activity / chart placeholder -->
       <div class="card p-6 lg:col-span-2">
@@ -67,6 +84,14 @@ import { useAuthStore } from '@/stores/auth'
 
 const auth = useAuthStore()
 const stats = ref({ total_users: 0, active_users: 0, admins: 0, inactive: 0 })
+const leaveStats = ref({ total: 0, pending: 0, approved: 0, rejected: 0 })
+
+const leaveCards = computed(() => [
+  { label: 'Total requests', value: leaveStats.value.total ?? 0, icon: 'calendar', bg: 'bg-primary-100', fg: 'text-primary-600', to: '/leaves' },
+  { label: 'Pending', value: leaveStats.value.pending ?? 0, icon: 'activity', bg: 'bg-amber-100', fg: 'text-amber-600', to: '/leaves?status=pending' },
+  { label: 'Approved', value: leaveStats.value.approved ?? 0, icon: 'check', bg: 'bg-emerald-100', fg: 'text-emerald-600', to: '/leaves?status=approved' },
+  { label: 'Rejected', value: leaveStats.value.rejected ?? 0, icon: 'x', bg: 'bg-rose-100', fg: 'text-rose-600', to: '/leaves?status=rejected' },
+])
 
 const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 const bars = [55, 75, 45, 90, 65, 80, 40]
@@ -82,6 +107,12 @@ onMounted(async () => {
   try {
     const { data } = await api.get('/stats')
     stats.value = data
+  } catch (e) {
+    /* keep zeros on failure */
+  }
+  try {
+    const { data } = await api.get('/leaves/stats')
+    leaveStats.value = data.data || {}
   } catch (e) {
     /* keep zeros on failure */
   }

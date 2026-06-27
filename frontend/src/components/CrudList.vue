@@ -206,7 +206,7 @@
 
 <script setup>
 import { ref, reactive, computed, watch, onMounted } from 'vue'
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRoute } from 'vue-router'
 import Icon from '@/components/Icon.vue'
 import api from '@/api/axios'
 import { proxied } from '@/api/image'
@@ -216,6 +216,7 @@ import { useAuthStore } from '@/stores/auth'
 const props = defineProps({ resourceKey: { type: String, required: true } })
 
 const auth = useAuthStore()
+const route = useRoute()
 const isAdmin = computed(() => auth.isAdmin)
 
 const cfg = computed(() => getResource(props.resourceKey))
@@ -349,7 +350,12 @@ const deleteLabel = computed(() => {
 
 function initFilters() {
   for (const k of Object.keys(filters)) delete filters[k]
-  for (const f of cfg.value.filters || []) filters[f.key] = ''
+  // Seed from URL query so links like /leaves?status=pending pre-filter the list.
+  for (const f of cfg.value.filters || []) {
+    const q = route.query[f.key]
+    filters[f.key] = q != null ? String(q) : ''
+  }
+  if (Object.values(filters).some((v) => v !== '')) showFilters.value = true
 }
 
 async function load() {
