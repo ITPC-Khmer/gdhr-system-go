@@ -111,13 +111,17 @@ func Setup(cfg *config.Config) *gin.Engine {
 				}
 			}
 
-			registerCRUD(protected, "/leave-approvals",
-				handlers.ListLeaveApprovals, handlers.GetLeaveApproval,
-				handlers.CreateLeaveApproval, handlers.UpdateLeaveApproval, handlers.DeleteLeaveApproval)
-			// Per-approver task actions: act on a single pending approval step.
-			// An approver's task list is GET /leave-approvals?staff_id=&status=pending.
-			protected.POST("/leave-approvals/:id/approve", handlers.ApproveLeaveApproval)
-			protected.POST("/leave-approvals/:id/reject", handlers.RejectLeaveApproval)
+			// Leave approvals are auto-seeded on request and advanced by the
+			// workflow — NOT hand-managed. So this is read-only (task list +
+			// get) plus the per-approver approve/reject actions. The task list
+			// is GET /leave-approvals?staff_id=&status=pending.
+			leaveApprovals := protected.Group("/leave-approvals")
+			{
+				leaveApprovals.GET("", handlers.ListLeaveApprovals)
+				leaveApprovals.GET("/:id", handlers.GetLeaveApproval)
+				leaveApprovals.POST("/:id/approve", handlers.ApproveLeaveApproval)
+				leaveApprovals.POST("/:id/reject", handlers.RejectLeaveApproval)
+			}
 			registerCRUD(protected, "/leave-files",
 				handlers.ListLeaveFiles, handlers.GetLeaveFile,
 				handlers.CreateLeaveFile, handlers.UpdateLeaveFile, handlers.DeleteLeaveFile)

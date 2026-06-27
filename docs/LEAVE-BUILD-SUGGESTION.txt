@@ -42,7 +42,8 @@ API ENDPOINTS  (all under /api, JWT required)
   POST                  /leaves/:id/override-reject   admin break-glass  body: {reject_reason?}
   (the one-shot POST /leaves/:id/approve|reject were REMOVED — admins are
    view-only for leave; approval happens per-step via /leave-approvals below)
-  GET/POST/PUT/DELETE   /leave-approvals      (writes admin-only)
+  GET                   /leave-approvals      read-only (auto-seeded + workflow-
+  GET                   /leave-approvals/:id  driven; act via approve/reject below)
   GET/POST/PUT/DELETE   /leave-files          (writes admin-only)
   GET/POST/PUT/DELETE   /leave-years          (writes admin-only)
   GET/POST/PUT/DELETE   /staff-institute-roles  (writes admin-only; create &

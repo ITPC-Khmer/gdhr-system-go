@@ -406,6 +406,7 @@ export const resources = {
     icon: 'shield',
     pk: 'id',
     pkEditable: false,
+    readOnly: true, // auto-seeded on request + advanced by the workflow; not hand-managed (only approve/reject)
     searchPlaceholder: 'Search staff, role, institute…',
     // Per-approver task actions. method/path drive the API call ({id} -> row pk);
     // showWhen gates visibility by a row field; prompt asks for a body field.

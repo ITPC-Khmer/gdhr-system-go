@@ -327,10 +327,7 @@ var leaveApprovalFilter = []string{"l_type", "leave_id", "staff_id", "status", "
 func ListLeaveApprovals(c *gin.Context) {
 	listResource[models.LeaveApproval](c, leaveApprovalSearch, leaveApprovalFilter, "id DESC")
 }
-func GetLeaveApproval(c *gin.Context)    { getResource[models.LeaveApproval](c, "id") }
-func CreateLeaveApproval(c *gin.Context) { createResource[models.LeaveApproval](c) }
-func UpdateLeaveApproval(c *gin.Context) { updateResource[models.LeaveApproval](c, "id") }
-func DeleteLeaveApproval(c *gin.Context) { deleteResource[models.LeaveApproval](c, "id") }
+func GetLeaveApproval(c *gin.Context) { getResource[models.LeaveApproval](c, "id") }
 
 // callerStaffID returns the staff_id linked to the authenticated user account,
 // or "" when the user can't be resolved or isn't linked to a staff member.
