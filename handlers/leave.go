@@ -75,6 +75,30 @@ func ListLeaves(c *gin.Context) {
 
 func GetLeave(c *gin.Context) { getResource[models.Leave](c, "id") }
 
+// LeaveStats returns the leave-request counts by status (plus total) in a single
+// grouped query — used by the list view's summary cards.
+func LeaveStats(c *gin.Context) {
+	type row struct {
+		Status string
+		Count  int64
+	}
+	var rows []row
+	if err := database.DB.Model(&models.Leave{}).
+		Select("status, COUNT(*) AS count").Group("status").Scan(&rows).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "failed to fetch stats"})
+		return
+	}
+
+	out := gin.H{"total": int64(0), "pending": int64(0), "approved": int64(0), "rejected": int64(0)}
+	var total int64
+	for _, r := range rows {
+		out[r.Status] = r.Count
+		total += r.Count
+	}
+	out["total"] = total
+	c.JSON(http.StatusOK, gin.H{"data": out})
+}
+
 // CreateLeave records the request and, in the same transaction, auto-seeds its
 // approval workflow so the request goes "live" ready for processing.
 func CreateLeave(c *gin.Context) {

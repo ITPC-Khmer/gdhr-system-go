@@ -11,6 +11,14 @@
       </RouterLink>
     </div>
 
+    <!-- Summary count cards -->
+    <div v-if="cfg.summary" class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div v-for="c in cfg.summary.cards" :key="c.key" class="card p-4">
+        <p class="text-xs font-medium uppercase tracking-wide text-slate-400">{{ c.label }}</p>
+        <p class="mt-1 text-2xl font-bold" :class="c.class">{{ summary[c.key] ?? 0 }}</p>
+      </div>
+    </div>
+
     <div class="card overflow-hidden">
       <!-- Toolbar: search + filters -->
       <div class="space-y-3 border-b border-slate-100 p-4">
@@ -214,6 +222,7 @@ const cfg = computed(() => getResource(props.resourceKey))
 
 const rows = ref([])
 const total = ref(0)
+const summary = ref({})
 const page = ref(1)
 const limit = ref(20)
 const search = ref('')
@@ -361,6 +370,19 @@ async function load() {
     total.value = 0
   } finally {
     loading.value = false
+  }
+  loadSummary()
+}
+
+// loadSummary fetches the resource's summary counts (if configured). Counts are
+// global (not affected by paging/filters), so failures are non-fatal.
+async function loadSummary() {
+  if (!cfg.value.summary) return
+  try {
+    const { data } = await api.get(cfg.value.summary.endpoint)
+    summary.value = data.data || {}
+  } catch (e) {
+    summary.value = {}
   }
 }
 

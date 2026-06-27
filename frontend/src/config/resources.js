@@ -338,6 +338,16 @@ export const resources = {
     pkEditable: false,
     detail: true, // enables the "view" link -> /leaves/:id (approval timeline)
     readOnly: true, // no add/edit/delete in-app; requests are filed via API, state changes via the approval workflow
+    // Summary count cards shown above the list (fetched from /leaves/stats).
+    summary: {
+      endpoint: '/leaves/stats',
+      cards: [
+        { key: 'total', label: 'Total requests', class: 'text-slate-800' },
+        { key: 'pending', label: 'Pending', class: 'text-amber-600' },
+        { key: 'approved', label: 'Approved', class: 'text-emerald-600' },
+        { key: 'rejected', label: 'Rejected', class: 'text-red-600' },
+      ],
+    },
     searchPlaceholder: 'Search staff, ref no., reason…',
     columns: [
       { key: 'id', label: 'ID' },

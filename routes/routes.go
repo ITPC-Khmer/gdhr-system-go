@@ -97,6 +97,7 @@ func Setup(cfg *config.Config) *gin.Engine {
 			leaves := protected.Group("/leaves")
 			{
 				leaves.GET("", handlers.ListLeaves)
+				leaves.GET("/stats", handlers.LeaveStats)
 				leaves.GET("/:id", handlers.GetLeave)
 				leaves.POST("", handlers.CreateLeave)
 
